@@ -91,6 +91,29 @@ describe('D3 chart interaction compatibility', function () {
       assert.deepStrictEqual(d3.brushSelection(client.chart.theBrush.node()), [437.5, 662.5]);
     });
   });
+  ['mouse', 'touch'].forEach(function (input) {
+    it('drags the context window back to now after the chart was drawn before layout, using ' + input, function () {
+      client = makeChart(d3, env.window, 'mg/dl', {width: 880});
+      client.layout.width = 900;
+      client.chart.update(false);
+      const overlay = client.chart.theBrush.select('.overlay').node();
+      if (input === 'mouse') {
+        mouse(overlay, 'mousedown', 450, 50, 1);
+        mouse(env.window, 'mouseup', 450, 50);
+        mouse(overlay, 'mousedown', 450, 50, 1);
+        mouse(env.window, 'mousemove', 1000, 50, 1);
+        mouse(env.window, 'mouseup', 1000, 50);
+      } else {
+        touch(overlay, 'touchstart', 450, 50);
+        touch(overlay, 'touchend', 450, 50);
+        touch(overlay, 'touchstart', 450, 50);
+        touch(overlay, 'touchmove', 1000, 50);
+        touch(overlay, 'touchend', 1000, 50);
+      }
+      assert.deepStrictEqual(d3.brushSelection(client.chart.theBrush.node()), [675, 900]);
+      assert.strictEqual(client.chart.inRetroMode(), false);
+    });
+  });
   function treatment(editMode) {
     client.editMode = editMode;
     client.renderer.drawTreatment({_id: 'treatment-1', NSCLIENT_ID: 'old-id', eventType: 'Meal Bolus',
@@ -174,14 +197,25 @@ describe('D3 chart interaction compatibility', function () {
         }
         if (!confirmed) return assert.deepStrictEqual(emitted, []);
         const split = operation === 'Move carbs' || operation === 'Move insulin';
-        assert.strictEqual(emitted.length, split ? 4 : 2);
-        assert.strictEqual(emitted[0][0], eventName);
+        const move = operation === 'Move';
+        // A time change also clears the fields the page derived at the old
+        // time (BF-103), so Move sends an unset before its update.
+        const stale = {mills: 1, endmills: 1, mgdl: 1, scaled: 1};
+        assert.strictEqual(emitted.length, split || move ? 4 : 2);
+        assert.strictEqual(emitted[0][0], move ? 'dbUpdateUnset' : eventName);
         assert.strictEqual(emitted[0][1]._id, 'treatment-1');
         assert.strictEqual(emitted[0][1].collection, 'treatments');
         const movedAt = client.chart.xScale.invert(x).toISOString();
-        if (operation === 'Move') assert.deepStrictEqual(emitted[0][1].data, {created_at: movedAt});
-        if (operation.includes('carbs')) assert.deepStrictEqual(emitted[0][1].data, {carbs: 1});
-        if (operation.includes('insulin')) assert.deepStrictEqual(emitted[0][1].data, {insulin: 1});
+        if (move) {
+          assert.deepStrictEqual(emitted[0][1].data, stale);
+          assert.strictEqual(emitted[1][0], eventName);
+          assert.strictEqual(emitted[1][1]._id, 'treatment-1');
+          assert.deepStrictEqual(emitted[1][1].data, {created_at: movedAt});
+        }
+        if (operation === 'Remove carbs') assert.deepStrictEqual(emitted[0][1].data, {carbs: 1});
+        if (operation === 'Remove insulin') assert.deepStrictEqual(emitted[0][1].data, {insulin: 1});
+        if (operation === 'Move carbs') assert.deepStrictEqual(emitted[0][1].data, Object.assign({carbs: 1}, stale));
+        if (operation === 'Move insulin') assert.deepStrictEqual(emitted[0][1].data, Object.assign({insulin: 1}, stale));
         if (split) {
           assert.strictEqual(emitted[1][0], 'dbAdd');
           const data = emitted[1][1].data;
@@ -190,6 +224,10 @@ describe('D3 chart interaction compatibility', function () {
           assert.strictEqual(data.NSCLIENT_ID, undefined);
           assert.strictEqual(data.carbs, operation === 'Move carbs' ? 20 : undefined);
           assert.strictEqual(data.insulin, operation === 'Move insulin' ? 2 : undefined);
+          // nothing the page derived at the old time is written to the new record
+          ['mills', 'date', 'mgdl', 'scaled', 'endmills'].forEach(function (field) {
+            assert.strictEqual(data[field], undefined, field);
+          });
         }
       });
     });

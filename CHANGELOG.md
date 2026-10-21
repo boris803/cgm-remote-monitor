@@ -6,6 +6,34 @@ All notable changes to cgm-remote-monitor are documented in this file.
 
 ### Fixed
 
+- **Server stopped by a token for a deleted subject:** Refuse a bearer token
+  whose subject was deleted, or lost when the database was dropped, the same way
+  as a wrong token. The token still verifies until it expires, and the first
+  request that carried it, through API v1 or the websocket and alarm socket,
+  stopped the server with `Cannot read properties of null (reading 'shiros')`.
+  API v3 now answers such a token with 401, as it does a wrong one, instead of
+  403. Fixes #8225.
+- **Food Editor on phones:** Scroll the food list, or the page, when a swipe
+  starts on a food or a quick pick. On a phone the list has room for two or
+  three foods, and swiping on them did nothing, so the rest of the list could
+  not be reached. Dragging a food into a quick pick and reordering quick picks
+  still use the mouse, as before. Fixes #8192.
+- **Day to Day events past midnight:** Draw an Exercise, Note, OpenAPS Offline,
+  Temporary Override or other event with a duration on every day it covers. An
+  exercise entered at 22:00 for four hours now shows from 22:00 to midnight on
+  its first day and from midnight to 02:00 on the next, also when the next day is
+  shown alone. Each part stays inside its own chart, with its label centered on
+  that part. Events that start and end on the same day are drawn as before.
+  Fixes #8223.
+- **Credential settings converted to numbers:** Keep credential and identifier
+  settings as text instead of converting any value that looks numeric. A Dexcom
+  account name that is a phone number keeps its leading plus and a password
+  keeps its leading zeros, so `CONNECT_SHARE_ACCOUNT_NAME=+15551234567` and
+  `CONNECT_SHARE_PASSWORD=007700` reach Dexcom Share as typed rather than as
+  `15551234567` and `7700`. The Medtronic CareLink and Glooko credentials, the
+  legacy `BRIDGE_*` settings and `LOOP_DEVELOPER_TEAM_ID` are covered as well.
+  Number and `on`/`off` conversion is unchanged for every other setting, and no
+  configuration changes are required. Relates to #8056 and #8181.
 - **Log volume:** Disable routine heartbeat, data-reload and Nightscout Connect
   diagnostics by default. Add `DEBUG_LOGGING=true` for server troubleshooting
   and `CONNECT_DEBUG=true` for connector-only diagnostics. Keep warnings and
